@@ -1,0 +1,65 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 150 20% 97.5%;
+    --foreground: 170 25% 10%;
+    --card: 0 0% 100%;
+    --muted: 160 15% 94%;
+    --muted-foreground: 170 10% 38%;
+    --border: 160 15% 88%;
+    --input: 160 15% 84%;
+    --ring: 173 80% 30%;
+    --primary: 173 80% 24%;
+    --primary-foreground: 0 0% 100%;
+    --positive: 152 70% 27%;
+    --negative: 0 72% 42%;
+    color-scheme: light;
+  }
+  .dark {
+    --background: 175 25% 7%;
+    --foreground: 150 15% 94%;
+    --card: 175 20% 11%;
+    --muted: 175 15% 16%;
+    --muted-foreground: 160 10% 66%;
+    --border: 175 15% 20%;
+    --input: 175 15% 26%;
+    --ring: 172 66% 50%;
+    --primary: 172 66% 44%;
+    --primary-foreground: 175 40% 6%;
+    --positive: 150 65% 55%;
+    --negative: 0 90% 70%;
+    color-scheme: dark;
+  }
+  * {
+    @apply border-border;
+  }
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    @apply bg-background font-sans text-foreground antialiased;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    overscroll-behavior-y: none;
+  }
+  /* 16px inputs stop iOS Safari zooming on focus */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer utilities {
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .pt-safe {
+    padding-top: env(safe-area-inset-top);
+  }
+}
