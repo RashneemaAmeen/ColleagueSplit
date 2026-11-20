@@ -103,6 +103,37 @@ begin
     into bal;
   assert bal = 0, 'expense credits equal expense shares';
 
+  -- ---- expense history (migration 0005) ----
+  -- admin edits the expense amount 120.00 -> 140.00 (shares 70 / 70)
+  perform pg_temp.act_as(u_admin);
+  perform public.save_expense(e1, g, gen_random_uuid(), 'Lunch', 14000, current_date, u_admin, 'lunch', 'equal', '', null,
+    jsonb_build_array(jsonb_build_object('user_id', u_admin, 'share_fils', 7000),
+                      jsonb_build_object('user_id', u_b,     'share_fils', 7000)));
+  -- history is written by a DEFERRED trigger; force it to run now instead of waiting for COMMIT
+  set constraints all immediate;
+  select count(*) into n from public.expense_revisions where expense_id = e1 and action = 'created';
+  assert n = 1, 'history: created entry';
+  select count(*) into n from public.expense_revisions
+   where expense_id = e1 and action = 'edited' and changed_by = u_admin
+     and (snapshot ->> 'amount_fils')::bigint = 14000 and jsonb_array_length(snapshot -> 'splits') = 2;
+  assert n = 1, 'history: edited entry with who + full snapshot';
+  set constraints all deferred;
+
+  -- history cannot be altered, even by a member
+  failed := false;
+  begin update public.expense_revisions set action = 'created' where expense_id = e1; exception when others then failed := true; end;
+  assert failed, 'history is append-only (update)';
+  failed := false;
+  begin delete from public.expense_revisions where expense_id = e1; exception when others then failed := true; end;
+  assert failed, 'history is append-only (delete)';
+
+  -- members can read it, outsiders cannot
+  select count(*) into n from public.expense_revisions where expense_id = e1;
+  assert n >= 2, 'members can read history';
+  perform pg_temp.act_as(u_out);
+  select count(*) into n from public.expense_revisions where expense_id = e1;
+  assert n = 0, 'RLS: outsider must not read history';
+
   raise notice 'ALL CHECKS PASSED';
 end $$;
 

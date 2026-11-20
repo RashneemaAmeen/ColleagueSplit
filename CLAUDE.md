@@ -13,6 +13,7 @@ Mobile-first AED expense-splitting PWA. Next.js 15 (App Router) + TypeScript + T
 - **All DB writes go through RPC functions** in `supabase/migrations/0003_functions.sql`. Never add INSERT/UPDATE/DELETE grants or policies for the client on money tables. Never use or reference a service-role key.
 - **Validation lives in three places that must stay in sync:** `lib/core/validate.ts` (client + DemoRepo), the SQL functions, and table CHECK constraints.
 - **Authorization rules must match in `DemoRepo` (`lib/store/demo.ts`) and SQL** — edit/delete expense: creator, payer or admin; record settlement: payer, receiver or admin; undo: those or recorder (reason required); invite: admin only.
+- **Expense history** (`expense_revisions`, migration 0005) is append-only and written by a deferred trigger on `expenses`. Never add client write grants/policies to it. `DemoRepo.recordRevision` mirrors it; diffs live in `lib/core/revisions.ts`.
 - Forms create a `clientRequestId` once (`useRef(uuid())`); keep that for idempotency.
 - The service worker (`public/sw.js`) must never cache HTML, API or Supabase responses and must never queue writes.
 

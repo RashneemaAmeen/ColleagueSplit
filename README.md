@@ -29,6 +29,7 @@ No external service has been configured for you. You must create a Supabase proj
 - Expense history: search, filter by member / category / date range, edit, delete (with confirmation), per-expense activity, CSV export
 - Reports: month navigation, total, paid vs share per member, by category, outstanding balances, CSV export
 - Activity log of every add / edit / delete / settlement / undo
+- **Expense audit history:** every create / edit / delete stores a full snapshot (amount, payer, date, category, split, notes, receipt) with who did it and when. Open an expense → *Change history* to see before → after for each field. Entries can't be edited or deleted by anyone through the app, and edits are flagged with an "edited" badge.
 - Dark mode, skeleton loaders, empty states, toasts, bottom navigation on mobile
 - PWA: manifest, generated icons, service worker, offline banner
 
@@ -51,6 +52,7 @@ Demo mode enforces the same authorization and validation rules as the real backe
    2. `supabase/migrations/0002_rls.sql`
    3. `supabase/migrations/0003_functions.sql`
    4. `supabase/migrations/0004_storage.sql`
+   5. `supabase/migrations/0005_expense_history.sql` (audit history; existing expenses get a "history starts here" baseline entry)
 3. **Authentication → URL Configuration**: set *Site URL* to your deployed URL (or `http://localhost:3000` for local) and add `<your-url>/auth/callback` to *Redirect URLs*.
 4. **Authentication → Providers → Email**: keep "Confirm email" on for production (the app shows a "check your email" screen). Turn it off for quick local testing if you prefer.
 5. Copy `.env.example` to `.env.local` and fill in **Project Settings → API**:
@@ -112,6 +114,7 @@ Key decisions:
 - **All writes go through `SECURITY DEFINER` Postgres functions** (`save_expense`, `record_settlement`, …). Each call is a single transaction, re-validates input, checks membership/role from `auth.uid()`, and writes the activity log. Direct INSERT/UPDATE/DELETE on those tables is revoked, and RLS limits SELECT to group members.
 - **Defence in depth for splits:** validated in the browser, again in the function, and a deferred constraint trigger guarantees `sum(shares) = amount` at commit.
 - **Duplicate prevention:** every form generates a `client_request_id` once; `unique (group_id, client_request_id)` makes retries/double-taps return the original record.
+- **Audit history** is written by a deferred database trigger (`0005`), so it fires at commit after the splits are final and can't be skipped by the app. The table is select-only for clients and blocks updates and direct deletes. Changes made directly in the database (SQL editor) are still captured, shown as "Direct database change". Edits made *before* `0005` was applied are only in the activity log, not itemised.
 - **Deletes are soft** (`deleted_at`) so the audit trail survives; settlements are never deleted, only undone with a reason.
 - **Who can edit/delete an expense:** its creator, its payer, or a group admin. **Record a settlement:** the payer, the receiver, or an admin. **Undo:** those people or the recorder.
 - The browser loads a whole group in one go (`loadGroup`) and computes balances client-side — appropriate for small groups; add pagination/server aggregation if groups grow large.

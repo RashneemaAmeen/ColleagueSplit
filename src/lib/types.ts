@@ -117,6 +117,38 @@ export interface GroupBundle {
   activity: Activity[];
 }
 
+/** Full state of an expense at one point in time (stored in the append-only history). */
+export interface ExpenseSnapshot {
+  description: string;
+  amountFils: number;
+  date: string;
+  paidBy: string;
+  category: Category;
+  splitMethod: SplitMethod;
+  notes: string;
+  receiptPath: string | null;
+  splits: ExpenseSplit[];
+}
+
+/**
+ * baseline = state when history tracking started (older expenses); created / edited / deleted
+ * are recorded automatically on every change.
+ */
+export type RevisionAction = "baseline" | "created" | "edited" | "deleted";
+
+export interface ExpenseRevision {
+  id: string;
+  expenseId: string;
+  groupId: string;
+  /** 1, 2, 3 … per expense. */
+  revision: number;
+  action: RevisionAction;
+  /** null = changed directly in the database, not through the app. */
+  changedBy: string | null;
+  changedAt: string;
+  snapshot: ExpenseSnapshot;
+}
+
 export interface ExpenseInput {
   /** Present when editing. */
   id?: string;

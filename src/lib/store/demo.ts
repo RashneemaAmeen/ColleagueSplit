@@ -1,16 +1,18 @@
+import { snapshotOf } from "../core/revisions";
 import { validateExpense, validateSettlement, ValidationError } from "../core/validate";
 import { formatAed } from "../core/money";
 import type {
   Activity,
   ActivityAction,
   ExpenseInput,
+  ExpenseRevision,
   Group,
   GroupBundle,
   Member,
   Profile,
   SettlementInput,
 } from "../types";
-import { createSeedState } from "./demo-seed";
+import { baselineRevision, createSeedState } from "./demo-seed";
 import type { DemoExpense, DemoState } from "./demo-seed";
 import { inviteCode, uuid } from "./ids";
 import {
@@ -74,7 +76,14 @@ export class DemoRepo implements Repo {
     if (raw) {
       try {
         const parsed = JSON.parse(raw) as DemoState;
-        if (parsed.version === 1) return parsed;
+        if (parsed.version === 1) {
+          // Data saved before history existed: add baseline entries (like the SQL backfill).
+          if (!parsed.revisions) {
+            parsed.revisions = parsed.expenses.filter((e) => !e.deletedAt).map((e) => baselineRevision(e));
+            this.storage.save(JSON.stringify(parsed));
+          }
+          return parsed;
+        }
       } catch {
         /* fall through to reseed */
       }
@@ -126,6 +135,20 @@ export class DemoRepo implements Repo {
       entityId,
       summary,
       createdAt: this.now().toISOString(),
+    });
+  }
+
+  private recordRevision(s: DemoState, e: DemoExpense, action: ExpenseRevision["action"]) {
+    const n = s.revisions.filter((r) => r.expenseId === e.id).length;
+    s.revisions.push({
+      id: uuid(),
+      expenseId: e.id,
+      groupId: e.groupId,
+      revision: n + 1,
+      action,
+      changedBy: s.currentUserId,
+      changedAt: this.now().toISOString(),
+      snapshot: structuredClone(snapshotOf(e)),
     });
   }
 
@@ -288,7 +311,7 @@ export class DemoRepo implements Repo {
       const existing = s.idempotency[key];
       if (existing) return existing; // duplicate submission: return the original
       const id = uuid();
-      s.expenses.push({
+      const created: DemoExpense = {
         id,
         groupId: input.groupId,
         description: input.description.trim(),
@@ -304,7 +327,9 @@ export class DemoRepo implements Repo {
         updatedAt: at,
         splits,
         deletedAt: null,
-      });
+      };
+      s.expenses.push(created);
+      this.recordRevision(s, created, "created");
       s.idempotency[key] = id;
       this.log(s, input.groupId, "expense_added", "expense", id, `Added "${input.description.trim()}" · ${formatAed(input.amountFils)}`);
       this.write(s);
@@ -329,6 +354,7 @@ export class DemoRepo implements Repo {
       splits,
     });
     const change = before === formatAed(e.amountFils) ? formatAed(e.amountFils) : `${before} → ${formatAed(e.amountFils)}`;
+    this.recordRevision(s, e, "edited");
     this.log(s, e.groupId, "expense_edited", "expense", e.id, `Edited "${e.description}" · ${change}`);
     this.write(s);
     return e.id;
@@ -342,8 +368,19 @@ export class DemoRepo implements Repo {
     if (!this.canModifyExpense(s, e, me.id))
       throw new AccessDeniedError("Only the person who added or paid for this expense, or a group admin, can delete it");
     e.deletedAt = this.now().toISOString();
+    this.recordRevision(s, e, "deleted");
     this.log(s, groupId, "expense_deleted", "expense", e.id, `Deleted "${e.description}" · ${formatAed(e.amountFils)}`);
     this.write(s);
+  }
+
+  async loadExpenseHistory(groupId: string, expenseId: string): Promise<ExpenseRevision[]> {
+    const s = this.read();
+    this.requireMember(s, groupId);
+    return structuredClone(
+      s.revisions
+        .filter((r) => r.groupId === groupId && r.expenseId === expenseId)
+        .sort((a, b) => a.revision - b.revision),
+    );
   }
 
   // ---------- settlements ----------

@@ -8,12 +8,13 @@ import { useApp, useName } from "@/components/app-provider";
 import { Amount } from "@/components/amount";
 import { EmptyState } from "@/components/empty-state";
 import { ExpenseRow } from "@/components/expense-row";
+import { ExpenseHistory } from "@/components/expense-history";
 import { ReceiptViewer } from "@/components/receipt-viewer";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Card, Input, Label, Select } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
-import { formatDate, formatDateTime } from "@/lib/core/dates";
+import { formatDate } from "@/lib/core/dates";
 import { formatAed } from "@/lib/core/money";
 import { expensesToCsv } from "@/lib/core/reports";
 import { downloadText } from "@/lib/download";
@@ -202,7 +203,6 @@ export default function ExpensesPage() {
               <Card className="divide-y overflow-hidden">
                 {g.items.map((e) => {
                   const open = openId === e.id;
-                  const activity = data.activity.filter((a) => a.entityId === e.id).slice().reverse();
                   return (
                     <div key={e.id}>
                       <div className="relative">
@@ -231,15 +231,7 @@ export default function ExpensesPage() {
                               {e.notes}
                             </p>
                           )}
-                          {activity.length > 0 && (
-                            <ul className="space-y-0.5 text-xs text-muted-foreground">
-                              {activity.map((a) => (
-                                <li key={a.id}>
-                                  {a.action === "expense_added" ? "Added" : a.action === "expense_edited" ? "Edited" : "Updated"} by {name(a.actorId)} · {formatDateTime(a.createdAt)}
-                                </li>
-                              ))}
-                            </ul>
-                          )}
+                          <ExpenseHistory groupId={data.group.id} expenseId={e.id} />
                           <div className="flex flex-wrap gap-2">
                             {e.receiptPath && <ReceiptViewer path={e.receiptPath} />}
                             {canModify(e) ? (

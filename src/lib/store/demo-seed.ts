@@ -1,9 +1,11 @@
+import { snapshotOf } from "../core/revisions";
 import { computeShares } from "../core/money";
 import { currentMonthKey, shiftMonth, todayISO } from "../core/dates";
 import type {
   Activity,
   Category,
   Expense,
+  ExpenseRevision,
   Group,
   Member,
   Profile,
@@ -28,6 +30,8 @@ export interface DemoState {
   groups: Group[];
   members: (Member & { groupId: string })[];
   expenses: DemoExpense[];
+  /** Append-only expense history (mirrors public.expense_revisions). */
+  revisions: ExpenseRevision[];
   settlements: Settlement[];
   activity: Activity[];
   invites: DemoInvite[];
@@ -62,6 +66,20 @@ interface SeedExpense {
   participants: string[];
   custom?: Record<string, number>;
   notes?: string;
+}
+
+/** History entry for an expense that existed before tracking began (same as the SQL backfill). */
+export function baselineRevision(e: DemoExpense): ExpenseRevision {
+  return {
+    id: `r-${e.id}-1`,
+    expenseId: e.id,
+    groupId: e.groupId,
+    revision: 1,
+    action: "baseline",
+    changedBy: e.createdBy,
+    changedAt: e.createdAt,
+    snapshot: snapshotOf(e),
+  };
 }
 
 export function createSeedState(): DemoState {
@@ -156,6 +174,7 @@ export function createSeedState(): DemoState {
     ],
     members,
     expenses,
+    revisions: expenses.map((e) => baselineRevision(e)),
     settlements,
     activity,
     invites: [],

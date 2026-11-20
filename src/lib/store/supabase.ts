@@ -4,6 +4,7 @@ import type {
   Activity,
   Expense,
   ExpenseInput,
+  ExpenseRevision,
   Group,
   GroupBundle,
   Member,
@@ -240,6 +241,40 @@ export class SupabaseRepo implements Repo {
   async deleteExpense(groupId: string, expenseId: string) {
     const { error } = await this.sb.rpc("delete_expense", { p_group: groupId, p_expense: expenseId });
     if (error) mapError(error);
+  }
+
+  async loadExpenseHistory(groupId: string, expenseId: string): Promise<ExpenseRevision[]> {
+    const { data, error } = await this.sb
+      .from("expense_revisions")
+      .select("*")
+      .eq("group_id", groupId)
+      .eq("expense_id", expenseId)
+      .order("revision", { ascending: true });
+    if (error) mapError(error);
+    return (data ?? []).map((r: any) => ({
+      id: r.id,
+      expenseId: r.expense_id,
+      groupId: r.group_id,
+      revision: r.revision,
+      action: r.action,
+      changedBy: r.changed_by,
+      changedAt: r.changed_at,
+      snapshot: {
+        description: r.snapshot.description,
+        amountFils: Number(r.snapshot.amount_fils),
+        date: r.snapshot.date,
+        paidBy: r.snapshot.paid_by,
+        category: r.snapshot.category,
+        splitMethod: r.snapshot.split_method,
+        notes: r.snapshot.notes ?? "",
+        receiptPath: r.snapshot.receipt_path ?? null,
+        splits: (r.snapshot.splits ?? []).map((x: any) => ({
+          userId: x.user_id,
+          shareFils: Number(x.share_fils),
+          percentBp: x.percent_bp,
+        })),
+      },
+    }));
   }
 
   // ---------- settlements ----------

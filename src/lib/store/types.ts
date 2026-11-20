@@ -1,5 +1,6 @@
 import type {
   ExpenseInput,
+  ExpenseRevision,
   Group,
   GroupBundle,
   Profile,
@@ -58,6 +59,8 @@ export interface Repo {
 
   saveExpense(input: ExpenseInput): Promise<string>;
   deleteExpense(groupId: string, expenseId: string): Promise<void>;
+  /** Append-only change history for one expense, oldest first. Members of the group only. */
+  loadExpenseHistory(groupId: string, expenseId: string): Promise<ExpenseRevision[]>;
   recordSettlement(input: SettlementInput): Promise<string>;
   undoSettlement(groupId: string, settlementId: string, reason: string): Promise<void>;
 

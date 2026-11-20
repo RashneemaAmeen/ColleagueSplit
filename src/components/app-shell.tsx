@@ -3,12 +3,13 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Home, Plus, Receipt, Scale, User, FlaskConical } from "lucide-react";
+import { Home, Plus, Receipt, RefreshCw, Scale, User, FlaskConical } from "lucide-react";
 import { useApp } from "@/components/app-provider";
 import { GroupSwitcher } from "@/components/group-switcher";
 import { LogoMark } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/primitives";
+import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -26,7 +27,8 @@ function isActive(path: string, href: string) {
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const { ready, me, groups, isDemo, data, loadError, refresh } = useApp();
+  const { ready, me, groups, isDemo, data, loadError, refresh, refreshing } = useApp();
+  const toast = useToast();
   const router = useRouter();
   const path = usePathname();
   const onWelcome = path === "/welcome" || path.startsWith("/join");
@@ -62,6 +64,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <span className="hidden sm:inline">ColleagueSplit</span>
           </Link>
           <GroupSwitcher />
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Refresh"
+            disabled={refreshing}
+            onClick={async () => (await refresh()) ? toast.success("Up to date") : toast.error("Couldn't refresh. Check your connection.")}
+            className="ml-auto md:ml-0"
+          >
+            <RefreshCw className={cn("h-5 w-5", refreshing && "animate-spin")} aria-hidden />
+          </Button>
           {/* Desktop nav (mobile uses the bottom bar) */}
           <nav className="hidden items-center gap-1 md:flex" aria-label="Main">
             {NAV.filter((n) => !("primary" in n && n.primary)).map((n) => (

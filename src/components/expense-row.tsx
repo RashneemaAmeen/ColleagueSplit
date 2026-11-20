@@ -14,6 +14,8 @@ import {
 import { useApp, useName } from "@/components/app-provider";
 import { Amount } from "@/components/amount";
 import { formatDate } from "@/lib/core/dates";
+import { wasEdited } from "@/lib/core/revisions";
+import { Badge } from "@/components/ui/primitives";
 import { CATEGORY_LABELS } from "@/lib/types";
 import type { Category, Expense } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -52,7 +54,10 @@ export function ExpenseRow({ expense, onClick, className }: { expense: Expense; 
         <Icon className="h-5 w-5" aria-hidden />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate font-medium">{expense.description}</span>
+        <span className="flex items-center gap-2">
+          <span className="truncate font-medium">{expense.description}</span>
+          {wasEdited(expense) && <Badge className="shrink-0">edited</Badge>}
+        </span>
         <span className="block truncate text-xs text-muted-foreground">
           {name(expense.paidBy)} paid · {formatDate(expense.date)} · {CATEGORY_LABELS[expense.category]}
         </span>

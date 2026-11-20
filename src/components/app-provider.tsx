@@ -24,7 +24,8 @@ interface AppState {
   data: GroupBundle | null;
   refreshing: boolean;
   loadError: string | null;
-  refresh: () => Promise<void>;
+  /** Reloads the active group. Resolves true on success, false if it failed (e.g. offline). */
+  refresh: () => Promise<boolean>;
   reloadAll: () => Promise<void>;
   selectGroup: (id: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -48,14 +49,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [refreshing, setRefreshing] = React.useState(false);
   const [loadError, setLoadError] = React.useState<string | null>(null);
 
-  const loadBundle = React.useCallback(async (r: Repo, id: string) => {
+  const loadBundle = React.useCallback(async (r: Repo, id: string): Promise<boolean> => {
     setRefreshing(true);
     try {
       setData(await r.loadGroup(id));
       setLoadError(null);
+      return true;
     } catch (e) {
       if (e instanceof AccessDeniedError) setData(null);
       setLoadError(e instanceof Error ? e.message : "Could not load group");
+      return false;
     } finally {
       setRefreshing(false);
     }
@@ -99,9 +102,35 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     load(r).finally(() => setReady(true));
   }, [load]);
 
+  const lastRefreshAt = React.useRef(0);
   const refresh = React.useCallback(async () => {
-    if (repo && groupId) await loadBundle(repo, groupId);
+    if (!repo || !groupId) return false;
+    lastRefreshAt.current = Date.now();
+    return loadBundle(repo, groupId);
   }, [repo, groupId, loadBundle]);
+
+  // Keep data fresh without polling: reload when the user comes back to the app (tab/app becomes
+  // visible, window focused, connection restored). Throttled so rapid switching can't spam the API.
+  const refreshRef = React.useRef(refresh);
+  React.useEffect(() => {
+    refreshRef.current = refresh;
+  }, [refresh]);
+  React.useEffect(() => {
+    const MIN_GAP_MS = 15_000;
+    const maybeRefresh = () => {
+      if (document.visibilityState !== "visible") return;
+      if (Date.now() - lastRefreshAt.current < MIN_GAP_MS) return;
+      void refreshRef.current();
+    };
+    document.addEventListener("visibilitychange", maybeRefresh);
+    window.addEventListener("focus", maybeRefresh);
+    window.addEventListener("online", maybeRefresh);
+    return () => {
+      document.removeEventListener("visibilitychange", maybeRefresh);
+      window.removeEventListener("focus", maybeRefresh);
+      window.removeEventListener("online", maybeRefresh);
+    };
+  }, []);
 
   const reloadAll = React.useCallback(async () => {
     if (repo) await load(repo);
