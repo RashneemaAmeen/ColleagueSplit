@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, Plus, Receipt, Scale } from "lucide-react";
+import * as React from "react";
+import { ArrowRight, ChevronRight, Plus, Receipt, Scale } from "lucide-react";
 import { useApp } from "@/components/app-provider";
 import { Amount } from "@/components/amount";
 import { EmptyState } from "@/components/empty-state";
 import { ExpenseRow } from "@/components/expense-row";
 import { MemberAvatar } from "@/components/member-avatar";
+import { MemberBalanceDialog } from "@/components/member-balance-dialog";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/primitives";
 import { currentMonthKey, monthLabel, shiftMonth } from "@/lib/core/dates";
@@ -16,6 +18,7 @@ import { CATEGORY_LABELS } from "@/lib/types";
 
 export default function DashboardPage() {
   const { me, data, members, balances, totalFils } = useApp();
+  const [selectedId, setSelectedId] = React.useState<string | null>(null);
   if (!me || !data) return null;
 
   const mine = balances[me.id] ?? 0;
@@ -98,7 +101,13 @@ export default function DashboardPage() {
           {members.map((m) => {
             const b = balances[m.userId] ?? 0;
             return (
-              <div key={m.userId} className="flex items-center gap-3 p-3">
+              <button
+                key={m.userId}
+                type="button"
+                onClick={() => setSelectedId(m.userId)}
+                aria-label={`View ${m.profile.name}'s balance details`}
+                className="flex w-full items-center gap-3 p-3 text-left transition-colors first:rounded-t-2xl last:rounded-b-2xl hover:bg-muted/60"
+              >
                 <MemberAvatar profile={m.profile} />
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium">
@@ -114,10 +123,12 @@ export default function DashboardPage() {
                 ) : (
                   <Amount fils={b} signed />
                 )}
-              </div>
+                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+              </button>
             );
           })}
         </Card>
+        <MemberBalanceDialog memberId={selectedId} onClose={() => setSelectedId(null)} />
       </section>
 
       {/* Monthly summary */}
