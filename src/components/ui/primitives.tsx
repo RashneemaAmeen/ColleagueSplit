@@ -59,12 +59,13 @@ export function Badge({
   className,
   tone = "muted",
   ...props
-}: React.HTMLAttributes<HTMLSpanElement> & { tone?: "muted" | "positive" | "negative" | "primary" }) {
+}: React.HTMLAttributes<HTMLSpanElement> & { tone?: "muted" | "positive" | "negative" | "primary" | "warning" }) {
   const tones = {
     muted: "bg-muted text-muted-foreground",
     positive: "bg-positive/10 text-positive",
     negative: "bg-negative/10 text-negative",
     primary: "bg-primary/10 text-primary",
+    warning: "bg-amber-500/15 text-amber-800 dark:text-amber-300",
   };
   return (
     <span

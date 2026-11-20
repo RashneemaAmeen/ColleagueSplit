@@ -14,6 +14,7 @@ Mobile-first AED expense-splitting PWA. Next.js 15 (App Router) + TypeScript + T
 - **Validation lives in three places that must stay in sync:** `lib/core/validate.ts` (client + DemoRepo), the SQL functions, and table CHECK constraints.
 - **Authorization rules must match in `DemoRepo` (`lib/store/demo.ts`) and SQL** — edit/delete expense: creator, payer or admin; record settlement: payer, receiver or admin; undo: those or recorder (reason required); invite: admin only.
 - **Expense history** (`expense_revisions`, migration 0005) is append-only and written by a deferred trigger on `expenses`. Never add client write grants/policies to it. `DemoRepo.recordRevision` mirrors it; diffs live in `lib/core/revisions.ts`.
+- **Settlements are one row per payment** with two-sided confirmation (migration 0006). Balances count all non-undone settlements; confirmation must never change a balance. Merge/confirm rules live in `lib/core/settlements.ts` (used by `DemoRepo`) and `record_settlement` / `confirm_settlement` in SQL — keep them identical. Confirmer = payer or receiver who did not record it.
 - Forms create a `clientRequestId` once (`useRef(uuid())`); keep that for idempotency.
 - The service worker (`public/sw.js`) must never cache HTML, API or Supabase responses and must never queue writes.
 

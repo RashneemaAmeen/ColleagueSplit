@@ -185,6 +185,8 @@ export class SupabaseRepo implements Repo {
       note: r.note,
       createdBy: r.created_by,
       createdAt: r.created_at,
+      confirmedAt: r.confirmed_at ?? null,
+      confirmedBy: r.confirmed_by ?? null,
       undoneAt: r.undone_at,
       undoneBy: r.undone_by,
       undoReason: r.undo_reason,
@@ -291,6 +293,11 @@ export class SupabaseRepo implements Repo {
     });
     if (error) mapError(error);
     return data as string;
+  }
+
+  async confirmSettlement(groupId: string, settlementId: string) {
+    const { error } = await this.sb.rpc("confirm_settlement", { p_group: groupId, p_settlement: settlementId });
+    if (error) mapError(error);
   }
 
   async undoSettlement(groupId: string, settlementId: string, reason: string) {

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ArrowRight, CheckCircle2, Plus, Undo2 } from "lucide-react";
+import { ArrowRight, BellRing, CheckCircle2, Plus, Undo2 } from "lucide-react";
 import { useApp, useName } from "@/components/app-provider";
 import { Amount } from "@/components/amount";
 import { EmptyState } from "@/components/empty-state";
@@ -14,6 +14,7 @@ import { useToast } from "@/components/ui/toast";
 import type { Transfer } from "@/lib/core/balances";
 import { formatDate, formatDateTime, todayISO } from "@/lib/core/dates";
 import { filsToDecimal, formatAed, parseAmountToFils } from "@/lib/core/money";
+import { canConfirm, settlementStatus, STATUS_LABELS } from "@/lib/core/settlements";
 import { validateSettlement, ValidationError } from "@/lib/core/validate";
 import { settlementsToCsv } from "@/lib/core/reports";
 import { downloadText } from "@/lib/download";
@@ -28,6 +29,16 @@ export default function SettlePage() {
   const online = useOnline();
   const [dialog, setDialog] = React.useState<{ transfer: Transfer | null; suggested: number | null } | null>(null);
   const [undoing, setUndoing] = React.useState<Settlement | null>(null);
+  const [confirmingId, setConfirmingId] = React.useState<string | null>(null);
+
+  // Keep payment status in sync across people's devices while this screen is open:
+  // poll gently, only while the app is visible and online (no polling in the background).
+  React.useEffect(() => {
+    const id = window.setInterval(() => {
+      if (document.visibilityState === "visible" && navigator.onLine) void refresh();
+    }, 15_000);
+    return () => window.clearInterval(id);
+  }, [refresh]);
 
   if (!data || !me) return null;
   const myRole = members.find((m) => m.userId === me.id)?.role;
@@ -62,6 +73,25 @@ export default function SettlePage() {
     );
   };
 
+  const toConfirm = data.settlements.filter((s) => canConfirm(s, me.id));
+
+  async function confirm(s: Settlement) {
+    if (!repo || confirmingId) return; // ignore repeated taps while a confirmation is in flight
+    if (!online) return toast.error("You're offline. Reconnect to confirm this payment.");
+    setConfirmingId(s.id);
+    try {
+      // Updates the EXISTING record; it never creates a payment and never changes balances.
+      await repo.confirmSettlement(data!.group.id, s.id);
+      await refresh();
+      toast.success(s.toUser === me!.id ? "Receipt confirmed" : "Payment confirmed");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not confirm payment");
+      await refresh(); // the record may have changed on another device
+    } finally {
+      setConfirmingId(null);
+    }
+  }
+
   async function undo(reason: string) {
     if (!undoing || !repo) return;
     try {
@@ -85,6 +115,43 @@ export default function SettlePage() {
           <Plus className="h-4 w-4" /> Other payment
         </Button>
       </div>
+
+      {toConfirm.length > 0 && (
+        <section aria-labelledby="confirm-h">
+          <h2 id="confirm-h" className="mb-2 flex items-center gap-2 font-semibold">
+            <BellRing className="h-4 w-4 text-amber-600" aria-hidden /> Needs your confirmation
+          </h2>
+          <Card className="divide-y border-amber-400/60">
+            {toConfirm.map((s) => {
+              const iAmReceiver = s.toUser === me.id;
+              return (
+                <div key={s.id} className="flex items-center justify-between gap-3 p-3">
+                  <div className="min-w-0">
+                    <p className="text-sm">
+                      {iAmReceiver ? (
+                        <>
+                          <strong>{name(s.fromUser)}</strong> says they paid you
+                        </>
+                      ) : (
+                        <>
+                          <strong>{name(s.toUser)}</strong> says they received from you
+                        </>
+                      )}{" "}
+                      <strong className="tabular">{formatAed(s.amountFils)}</strong>
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatDate(s.date)} · {PAYMENT_LABELS[s.method]} · already counted in balances
+                    </p>
+                  </div>
+                  <Button size="sm" loading={confirmingId === s.id} disabled={!!confirmingId || !online} onClick={() => confirm(s)}>
+                    {iAmReceiver ? "Confirm receipt" : "Confirm payment"}
+                  </Button>
+                </div>
+              );
+            })}
+          </Card>
+        </section>
+      )}
 
       {transfers.length === 0 ? (
         <EmptyState icon={CheckCircle2} title="All settled up!" description="Nobody owes anybody anything right now. Enjoy your next lunch." />
@@ -147,19 +214,28 @@ export default function SettlePage() {
                         Undone by {name(s.undoneBy!)} on {formatDateTime(s.undoneAt)} — “{s.undoReason}”
                       </p>
                     )}
+                    {settlementStatus(s) === "confirmed" && s.confirmedBy && s.confirmedBy !== s.createdBy && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Recorded by {name(s.createdBy)} · confirmed by {name(s.confirmedBy)}
+                      </p>
+                    )}
+                    {settlementStatus(s) === "awaiting" && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Recorded by {name(s.createdBy)} · waiting for {name(s.createdBy === s.fromUser ? s.toUser : s.fromUser)} to confirm
+                      </p>
+                    )}
                   </div>
                   <div className="shrink-0 text-right">
                     <span className={`tabular text-sm font-semibold ${s.undoneAt ? "text-muted-foreground line-through" : ""}`}>{formatAed(s.amountFils)}</span>
-                    {s.undoneAt ? (
-                      <div>
-                        <Badge>undone</Badge>
-                      </div>
-                    ) : (
-                      canUndo(s) && (
-                        <button className="mt-0.5 flex items-center gap-1 text-xs font-medium text-negative" onClick={() => setUndoing(s)}>
-                          <Undo2 className="h-3 w-3" /> Undo
-                        </button>
-                      )
+                    <div>
+                      <Badge tone={settlementStatus(s) === "confirmed" ? "positive" : settlementStatus(s) === "awaiting" ? "warning" : "muted"}>
+                        {STATUS_LABELS[settlementStatus(s)]}
+                      </Badge>
+                    </div>
+                    {canUndo(s) && (
+                      <button className="mt-0.5 flex items-center gap-1 text-xs font-medium text-negative" onClick={() => setUndoing(s)}>
+                        <Undo2 className="h-3 w-3" /> Undo
+                      </button>
                     )}
                   </div>
                 </div>

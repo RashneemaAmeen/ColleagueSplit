@@ -81,6 +81,12 @@ export interface Settlement {
   note: string;
   createdBy: string;
   createdAt: string;
+  /**
+   * Two-sided confirmation. The payment affects balances from the moment it is recorded;
+   * confirmation only records that the OTHER party agrees. null = still awaiting confirmation.
+   */
+  confirmedAt: string | null;
+  confirmedBy: string | null;
   undoneAt: string | null;
   undoneBy: string | null;
   undoReason: string | null;
@@ -93,6 +99,7 @@ export type ActivityAction =
   | "expense_edited"
   | "expense_deleted"
   | "settlement_added"
+  | "settlement_confirmed"
   | "settlement_undone";
 
 export interface Activity {

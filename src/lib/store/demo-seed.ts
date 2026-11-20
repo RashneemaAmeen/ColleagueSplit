@@ -146,6 +146,8 @@ export function createSeedState(): DemoState {
       note: "Part of dinner",
       createdBy: "u-priya",
       createdAt: now,
+      confirmedAt: now,
+      confirmedBy: "u-rashid",
       undoneAt: null,
       undoneBy: null,
       undoReason: null,

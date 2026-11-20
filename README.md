@@ -25,7 +25,7 @@ No external service has been configured for you. You must create a Supabase proj
 - Dashboard: balances, you owe / owed to you, group total, monthly summary, recent expenses
 - Add expense: description, amount, date, payer, 8 categories, split between selected members, **equal / exact / percentage** splits with a live per-person preview, notes, optional private receipt
 - Integer-fils money arithmetic (no floating point); shares always add up exactly (largest-remainder rounding)
-- Settle Up: minimised payment suggestions, full or partial payments, cash/bank transfer, history, undo with reason + audit log. Settlements move balances but never count as spending. **No payment gateway** — it only records payments you make yourselves.
+- Settle Up: minimised payment suggestions, full or partial payments, cash/bank transfer, history, undo with reason + audit log. **Two-sided confirmation:** one settlement record per payment. Whoever records it (payer: "I paid", or receiver: "Received") applies it to balances immediately; the other person gets a *Confirm receipt* / *Confirm payment* button. Statuses: *Awaiting confirmation*, *Confirmed*, *Undone*. Confirming updates the same record and never changes a balance. Settlements move balances but never count as spending. **No payment gateway** — it only records payments you make yourselves.
 - Expense history: search, filter by member / category / date range, edit, delete (with confirmation), per-expense activity, CSV export
 - Reports: month navigation, total, paid vs share per member, by category, outstanding balances, CSV export
 - Activity log of every add / edit / delete / settlement / undo
@@ -53,6 +53,7 @@ Demo mode enforces the same authorization and validation rules as the real backe
    3. `supabase/migrations/0003_functions.sql`
    4. `supabase/migrations/0004_storage.sql`
    5. `supabase/migrations/0005_expense_history.sql` (audit history; existing expenses get a "history starts here" baseline entry)
+   6. `supabase/migrations/0006_settlement_confirmation.sql` (one settlement per payment + confirmation; existing settlements become "confirmed")
 3. **Authentication → URL Configuration**: set *Site URL* to your deployed URL (or `http://localhost:3000` for local) and add `<your-url>/auth/callback` to *Redirect URLs*.
 4. **Authentication → Providers → Email**: keep "Confirm email" on for production (the app shows a "check your email" screen). Turn it off for quick local testing if you prefer.
 5. Copy `.env.example` to `.env.local` and fill in **Project Settings → API**:
@@ -62,6 +63,10 @@ Demo mode enforces the same authorization and validation rules as the real backe
    ```
    Use the **anon** key only. The service-role key is never used by this app and must never be placed in a `NEXT_PUBLIC_` variable.
 6. `npm run dev`, sign up, create your group, and invite your colleagues from **Profile**.
+
+### Checking for duplicate settlements from the old bug
+
+Before the two-sided confirmation fix, tapping both "I paid" and "Received" recorded the same payment twice. Run `supabase/tests/find_duplicate_settlements.sql` (read-only, changes nothing) to list possible duplicates. Review each with the people involved, then use **Undo** on the extra payment from Settle Up with a reason — never delete rows by hand.
 
 ### Verifying your Supabase setup
 
@@ -115,6 +120,7 @@ Key decisions:
 - **Defence in depth for splits:** validated in the browser, again in the function, and a deferred constraint trigger guarantees `sum(shares) = amount` at commit.
 - **Duplicate prevention:** every form generates a `client_request_id` once; `unique (group_id, client_request_id)` makes retries/double-taps return the original record.
 - **Audit history** is written by a deferred database trigger (`0005`), so it fires at commit after the splits are final and can't be skipped by the app. The table is select-only for clients and blocks updates and direct deletes. Changes made directly in the database (SQL editor) are still captured, shown as "Direct database change". Edits made *before* `0005` was applied are only in the activity log, not itemised.
+- **Settlement confirmation** (`0006`): balances count every settlement that is not undone, from the moment it is recorded, so confirming can never double-apply it. `record_settlement` takes a per-pair advisory lock; if the *other* party already recorded the same direction + amount and it is still unconfirmed, the call becomes a confirmation of that row instead of inserting a second one. `confirm_settlement` is idempotent and only the payer/receiver who did *not* record it may confirm. Different amounts (partial payments) and repeated same-amount payments by the same person are separate records.
 - **Deletes are soft** (`deleted_at`) so the audit trail survives; settlements are never deleted, only undone with a reason.
 - **Who can edit/delete an expense:** its creator, its payer, or a group admin. **Record a settlement:** the payer, the receiver, or an admin. **Undo:** those people or the recorder.
 - The browser loads a whole group in one go (`loadGroup`) and computes balances client-side — appropriate for small groups; add pagination/server aggregation if groups grow large.

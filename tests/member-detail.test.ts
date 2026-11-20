@@ -33,6 +33,8 @@ function settlement(over: Partial<Settlement> & Pick<Settlement, "id" | "fromUse
     note: "",
     createdBy: over.fromUser,
     createdAt: "2026-11-12T10:00:00Z",
+    confirmedAt: "2026-11-12T10:00:00Z",
+    confirmedBy: over.createdBy ?? over.fromUser,
     undoneAt: null,
     undoneBy: null,
     undoReason: null,

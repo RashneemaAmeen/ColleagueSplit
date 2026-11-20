@@ -26,6 +26,7 @@ declare
   rid     uuid := gen_random_uuid();
   e1      uuid;
   e2      uuid;
+  s1      uuid;
   n       int;
   bal     bigint;
   failed  boolean;
@@ -96,6 +97,41 @@ begin
   failed := false;
   begin perform public.undo_settlement(g, (select id from public.settlements where group_id = g limit 1), ' '); exception when others then failed := true; end;
   assert failed, 'undo needs a reason';
+
+  -- ---- two-sided settlement confirmation (migration 0006) ----
+  -- B's 30.00 payment (recorded by B above) takes effect immediately but awaits the receiver.
+  select id into s1 from public.settlements where group_id = g;
+  select count(*) into n from public.settlements where group_id = g and confirmed_at is null and undone_at is null;
+  assert n = 1, 'settlement starts awaiting confirmation';
+  -- the person who recorded it cannot confirm their own payment
+  failed := false;
+  begin perform public.confirm_settlement(g, s1); exception when others then failed := true; end;
+  assert failed, 'recorder cannot confirm own payment';
+  -- receiver (admin) taps "Received" on a stale screen, with a NEW request id:
+  -- it must merge into the existing row instead of inserting a duplicate
+  perform pg_temp.act_as(u_admin);
+  assert public.record_settlement(g, gen_random_uuid(), u_b, u_admin, 3000, 'cash', current_date, '') = s1,
+    'stale "Received" returns the existing settlement';
+  select count(*) into n from public.settlements where group_id = g;
+  assert n = 1, 'no duplicate settlement row';
+  select count(*) into n from public.settlements
+   where id = s1 and confirmed_by = u_admin and confirmed_at is not null;
+  assert n = 1, 'merged call confirmed the existing row';
+  -- confirming again is a harmless no-op and is logged only once
+  perform public.confirm_settlement(g, s1);
+  select count(*) into n from public.activity_logs where group_id = g and action = 'settlement_confirmed';
+  assert n = 1, 'confirmation logged once';
+  -- a separate payment of the same amount after the first was confirmed is allowed
+  perform pg_temp.act_as(u_b);
+  perform public.record_settlement(g, gen_random_uuid(), u_b, u_admin, 3000, 'cash', current_date, '');
+  select count(*) into n from public.settlements where group_id = g;
+  assert n = 2, 'separate same-amount payment is allowed';
+  -- a non-member cannot confirm
+  perform pg_temp.act_as(u_out);
+  failed := false;
+  begin perform public.confirm_settlement(g, s1); exception when others then failed := true; end;
+  assert failed, 'outsider cannot confirm';
+  perform pg_temp.act_as(u_b);
 
   -- balances sum to zero: payer credit - shares - settlements
   select (select coalesce(sum(amount_fils), 0) from public.expenses where group_id = g)

@@ -11,6 +11,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { formatDate } from "@/lib/core/dates";
 import { formatAed } from "@/lib/core/money";
 import { buildMemberDetail } from "@/lib/core/member-detail";
+import { settlementStatus, STATUS_LABELS } from "@/lib/core/settlements";
 import type { CounterpartyAmount, MemberExpenseLine } from "@/lib/core/member-detail";
 import { CATEGORY_LABELS, PAYMENT_LABELS } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -131,7 +132,11 @@ export function MemberBalanceDialog({ memberId, onClose }: { memberId: string | 
                       </div>
                       <div className="shrink-0 text-right">
                         <span className={cn("tabular text-sm font-semibold", s.undoneAt && "text-muted-foreground line-through")}>{formatAed(s.amountFils)}</span>
-                        <div>{s.undoneAt ? <Badge>undone</Badge> : <Badge tone="positive">active</Badge>}</div>
+                        <div>
+                          <Badge tone={settlementStatus(s) === "confirmed" ? "positive" : settlementStatus(s) === "awaiting" ? "warning" : "muted"}>
+                            {STATUS_LABELS[settlementStatus(s)]}
+                          </Badge>
+                        </div>
                       </div>
                     </li>
                   ))}

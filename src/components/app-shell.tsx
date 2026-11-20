@@ -10,6 +10,7 @@ import { LogoMark } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
+import { canConfirm } from "@/lib/core/settlements";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -29,6 +30,8 @@ function isActive(path: string, href: string) {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { ready, me, groups, isDemo, data, loadError, refresh, refreshing } = useApp();
   const toast = useToast();
+  // payments recorded by someone else that are waiting for MY confirmation
+  const awaitingMe = me && data ? data.settlements.filter((s) => canConfirm(s, me.id)).length : 0;
   const router = useRouter();
   const path = usePathname();
   const onWelcome = path === "/welcome" || path.startsWith("/join");
@@ -86,6 +89,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 )}
               >
                 {n.label}
+                {n.href === "/settle" && awaitingMe > 0 && (
+                  <span className="ml-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-negative px-1 text-[11px] font-semibold text-white" aria-label={`${awaitingMe} payment${awaitingMe > 1 ? "s" : ""} awaiting your confirmation`}>
+                    {awaitingMe}
+                  </span>
+                )}
               </Link>
             ))}
             <Button asChild size="sm" className="ml-2">
@@ -141,7 +149,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                       active ? "text-primary" : "text-muted-foreground",
                     )}
                   >
-                    <Icon className="h-5 w-5" />
+                    <span className="relative">
+                      <Icon className="h-5 w-5" />
+                      {n.href === "/settle" && awaitingMe > 0 && (
+                        <span className="absolute -right-2 -top-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-negative px-1 text-[10px] font-semibold text-white" aria-label={`${awaitingMe} payment${awaitingMe > 1 ? "s" : ""} awaiting your confirmation`}>
+                          {awaitingMe}
+                        </span>
+                      )}
+                    </span>
                     {n.label}
                   </Link>
                 )}

@@ -2,6 +2,7 @@ import { CATEGORIES } from "../types";
 import type { Category, Expense, Member, Settlement } from "../types";
 import { filsToDecimal } from "./money";
 import { monthKey } from "./dates";
+import { settlementStatus } from "./settlements";
 
 export interface MemberMonthStats {
   userId: string;
@@ -128,7 +129,7 @@ export function settlementsToCsv(settlements: Settlement[], members: Member[]): 
       nameOf(members, s.toUser),
       filsToDecimal(s.amountFils),
       s.method,
-      s.undoneAt ? "undone" : "active",
+      settlementStatus(s),
     ]),
   ]);
 }

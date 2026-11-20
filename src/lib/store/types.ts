@@ -62,6 +62,11 @@ export interface Repo {
   /** Append-only change history for one expense, oldest first. Members of the group only. */
   loadExpenseHistory(groupId: string, expenseId: string): Promise<ExpenseRevision[]>;
   recordSettlement(input: SettlementInput): Promise<string>;
+  /**
+   * Confirms a payment recorded by the other party. Updates the existing record (never creates
+   * one) and never changes balances. Idempotent.
+   */
+  confirmSettlement(groupId: string, settlementId: string): Promise<void>;
   undoSettlement(groupId: string, settlementId: string, reason: string): Promise<void>;
 
   uploadReceipt(groupId: string, file: File): Promise<string>;

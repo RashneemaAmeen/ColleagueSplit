@@ -1,4 +1,5 @@
 import { snapshotOf } from "../core/revisions";
+import { canConfirm, findMergeCandidate } from "../core/settlements";
 import { validateExpense, validateSettlement, ValidationError } from "../core/validate";
 import { formatAed } from "../core/money";
 import type {
@@ -395,6 +396,21 @@ export class DemoRepo implements Repo {
     const key = `${input.groupId}:${input.clientRequestId}`;
     const existing = s.idempotency[key];
     if (existing) return existing;
+
+    const name = (uid: string) => s.users.find((u) => u.id === uid)?.name ?? "Someone";
+
+    // The other side already recorded this exact payment and it is unconfirmed: this call is a
+    // confirmation of that record, NOT a second payment (mirrors record_settlement in SQL).
+    const pending = findMergeCandidate(s.settlements, input, me.id);
+    if (pending) {
+      pending.confirmedAt = this.now().toISOString();
+      pending.confirmedBy = me.id;
+      s.idempotency[key] = pending.id;
+      this.log(s, input.groupId, "settlement_confirmed", "settlement", pending.id, this.confirmSummary(s, pending, me.id));
+      this.write(s);
+      return pending.id;
+    }
+
     const id = uuid();
     s.settlements.push({
       id,
@@ -407,15 +423,40 @@ export class DemoRepo implements Repo {
       note: input.note.trim(),
       createdBy: me.id,
       createdAt: this.now().toISOString(),
+      confirmedAt: null,
+      confirmedBy: null,
       undoneAt: null,
       undoneBy: null,
       undoReason: null,
     });
     s.idempotency[key] = id;
-    const name = (uid: string) => s.users.find((u) => u.id === uid)?.name ?? "Someone";
     this.log(s, input.groupId, "settlement_added", "settlement", id, `${name(input.fromUser)} paid ${name(input.toUser)} ${formatAed(input.amountFils)}`);
     this.write(s);
     return id;
+  }
+
+  private confirmSummary(s: DemoState, st: { fromUser: string; toUser: string; amountFils: number }, confirmerId: string) {
+    const name = (uid: string) => s.users.find((u) => u.id === uid)?.name ?? "Someone";
+    return confirmerId === st.toUser
+      ? `${name(st.toUser)} confirmed receiving ${formatAed(st.amountFils)} from ${name(st.fromUser)}`
+      : `${name(st.fromUser)} confirmed paying ${formatAed(st.amountFils)} to ${name(st.toUser)}`;
+  }
+
+  async confirmSettlement(groupId: string, settlementId: string) {
+    const s = this.read();
+    const { me } = this.requireMember(s, groupId);
+    const st = s.settlements.find((x) => x.id === settlementId && x.groupId === groupId);
+    if (!st) throw new NotFoundError("Settlement not found");
+    if (st.undoneAt) throw new ValidationError(["This payment was undone"]);
+    if (st.confirmedAt) return; // already confirmed: harmless no-op (idempotent)
+    if (me.id !== st.fromUser && me.id !== st.toUser)
+      throw new AccessDeniedError("Only the payer or the receiver can confirm this payment");
+    if (!canConfirm(st, me.id))
+      throw new AccessDeniedError("You recorded this payment, so the other person needs to confirm it");
+    st.confirmedAt = this.now().toISOString();
+    st.confirmedBy = me.id;
+    this.log(s, groupId, "settlement_confirmed", "settlement", st.id, this.confirmSummary(s, st, me.id));
+    this.write(s);
   }
 
   async undoSettlement(groupId: string, settlementId: string, reason: string) {
