@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FlaskConical } from "lucide-react";
+import { Eye, EyeOff, FlaskConical } from "lucide-react";
 import { useApp } from "@/components/app-provider";
 import { LogoMark } from "@/components/logo";
 import { MemberAvatar } from "@/components/member-avatar";
@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, Input, Label } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
 import { DemoRepo } from "@/lib/store/demo";
+import { setRememberPreference } from "@/lib/supabase/remember";
 
 /** Only allow same-site relative redirects (prevents open-redirect via ?next=). */
 function safeNext(next: string | null): string {
@@ -28,6 +29,8 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [sent, setSent] = React.useState(false);
+  const [showPassword, setShowPassword] = React.useState(false);
+  const [remember, setRemember] = React.useState(true);
 
   React.useEffect(() => {
     if (ready && me) router.replace(next);
@@ -38,6 +41,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
     if (!repo || busy) return;
     setBusy(true);
     try {
+      if (!isDemo) setRememberPreference(mode === "login" ? remember : true);
       if (mode === "signup") {
         if (password.length < 8) throw new Error("Password must be at least 8 characters");
         const { needsConfirmation } = await repo.signUp(email, password, name || email.split("@")[0]);
@@ -95,16 +99,39 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
             </div>
             <div>
               <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                autoComplete={mode === "login" ? "current-password" : "new-password"}
-                required
-                minLength={mode === "signup" ? 8 : undefined}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  autoComplete={mode === "login" ? "current-password" : "new-password"}
+                  required
+                  minLength={mode === "signup" ? 8 : undefined}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="pr-12"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((s) => !s)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-pressed={showPassword}
+                  className="absolute right-1 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  {showPassword ? <EyeOff className="h-5 w-5" aria-hidden /> : <Eye className="h-5 w-5" aria-hidden />}
+                </button>
+              </div>
             </div>
+            {mode === "login" && (
+              <label className="flex cursor-pointer items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={remember}
+                  onChange={(e) => setRemember(e.target.checked)}
+                  className="h-4 w-4 rounded border-input accent-primary"
+                />
+                Remember me
+              </label>
+            )}
             <Button type="submit" size="lg" className="w-full" loading={busy}>
               {mode === "login" ? "Log in" : "Sign up"}
             </Button>

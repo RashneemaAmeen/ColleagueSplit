@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { ALIVE_COOKIE, NO_REMEMBER_COOKIE } from "@/lib/supabase/remember";
 
 /**
  * Server-side session gate:
@@ -13,6 +14,21 @@ export async function middleware(request: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (process.env.NEXT_PUBLIC_DEMO_MODE === "true" || !url || !key) return NextResponse.next();
+
+  const path = request.nextUrl.pathname;
+  const isPublic = PUBLIC_PATHS.some((p) => path === p || path.startsWith(`${p}/`));
+
+  // "Remember me" was off and the browser has since been closed: end the login.
+  if (request.cookies.has(NO_REMEMBER_COOKIE) && !request.cookies.has(ALIVE_COOKIE)) {
+    const login = request.nextUrl.clone();
+    login.pathname = "/login";
+    login.search = path === "/" || isPublic ? "" : `?next=${encodeURIComponent(path + request.nextUrl.search)}`;
+    const res = isPublic ? NextResponse.next() : NextResponse.redirect(login);
+    request.cookies.getAll().forEach(({ name }) => {
+      if (name.startsWith("sb-") || name === NO_REMEMBER_COOKIE) res.cookies.delete(name);
+    });
+    return res;
+  }
 
   let response = NextResponse.next({ request });
   const supabase = createServerClient(url, key, {
@@ -30,9 +46,6 @@ export async function middleware(request: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
-  const path = request.nextUrl.pathname;
-  const isPublic = PUBLIC_PATHS.some((p) => path === p || path.startsWith(`${p}/`));
 
   if (!user && !isPublic) {
     const login = request.nextUrl.clone();
